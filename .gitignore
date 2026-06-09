@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environment
+.venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# VSCode
+.vscode/
+
+# Raw databases
+data/raw/
+
+# Logs
+logs/
+
+# Models
+models/
+
+# SHAP plots
+outputs/shap_plots/
+
+# OS files
+.DS_Store
+Thumbs.db
