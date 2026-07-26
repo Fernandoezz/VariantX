@@ -26,3 +26,7 @@ outputs/shap_plots/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Generated data
+data/interim/
+*.csv
