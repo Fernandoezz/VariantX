@@ -4,22 +4,19 @@ import pandas as pd
 def clean_gnomad_sv(df):
     df = df.copy()
 
-    # Keep only deletions - matches this project's CNV scope (per proposal)
     df = df[df["sv_type_raw"] == "DEL"]
 
-    # Keep only calls that passed gnomAD's own quality filtering
     before_filter = len(df)
     df = df[df["variant_filter"] == "PASS"]
     dropped_low_quality = before_filter - len(df)
 
+    # Normalize chromosome naming to match Ensembl/ClinVar convention
+    # (gnomAD-SV uses 'chr21' style, Ensembl uses plain '21')
+    df["chromosome"] = df["chromosome"].str.replace("^chr", "", regex=True)
+
     df["end_position"] = pd.to_numeric(df["end_position_raw"], errors="coerce")
     df["allele_frequency"] = pd.to_numeric(df["allele_frequency_raw"], errors="coerce")
-
-    # SVLEN is often reported as negative for deletions in VCF convention;
-    # take absolute value so it represents a plain size in base pairs.
     df["deletion_size"] = pd.to_numeric(df["sv_length_raw"], errors="coerce").abs()
-
-    # Cross-check: derive size from coordinates too, in case SVLEN is missing
     df["deletion_size_from_coords"] = df["end_position"] - df["start_position"]
 
     missing_end = df["end_position"].isna().sum()
