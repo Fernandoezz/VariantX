@@ -4,9 +4,9 @@ import pandas as pd
 
 random.seed(42)
 
-N_CNV_PATIENTS = 1000        # real training target (proposal range: 500-2000)
+N_CNV_PATIENTS = 1000        # real training target 
 MAX_PATIENTS_PER_GENE = 3
-N_BACKGROUND_DELETIONS = 30  # smaller than SNV's 100 - CNV candidate lists are naturally shorter
+N_BACKGROUND_DELETIONS = 30  # smaller than SNV's 100 
 N_HARD_NEGATIVES = 3
 SYMPTOM_KEEP_FRACTION = (0.6, 0.9)
 N_NOISE_SYMPTOMS = (0, 2)

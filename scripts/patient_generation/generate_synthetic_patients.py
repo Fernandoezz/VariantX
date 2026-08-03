@@ -4,7 +4,7 @@ import pandas as pd
 
 random.seed(42)  # reproducibility
 
-N_PATIENTS = 5000          # real training target (per proposal Table 1)
+N_PATIENTS = 5000          # real training target 
 MAX_PATIENTS_PER_GENE = 3  # gene diversity cap
 N_BACKGROUND_VARIANTS = 100
 N_HARD_NEGATIVES_UNCERTAIN = 3   # uncertain/conflicting significance, unrelated gene

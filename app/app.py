@@ -8,7 +8,8 @@ sys.path.append(os.path.dirname(__file__))
 from pipeline import (
     parse_patient_vcf, parse_patient_cnv_vcf, load_reference_tables,
     annotate_variants, annotate_cnv_variants, score_patient_variants,
-    predict_and_rank, predict_and_rank_cnv
+    predict_and_rank, predict_and_rank_cnv, explain_top_candidate,
+    detect_vcf_type
 )
 
 
@@ -54,6 +55,7 @@ st.markdown("""
 
 st.title("VariantX: Patient-Specific Variant Prioritization")
 st.caption("Upload a patient VCF and enter clinical symptoms to rank candidate causal variants.")
+
 
 if "reset_counter" not in st.session_state:
     st.session_state.reset_counter = 0
@@ -114,7 +116,6 @@ st.header("2. Enter Patient Symptoms")
 st.caption("Start typing a symptom name - matching HPO terms appear instantly.")
 
 
-
 def search_hpo_terms(search_term: str):
     if not search_term or len(search_term) < 2:
         return []
@@ -164,66 +165,90 @@ if st.button("Run Analysis", type="primary"):
         with open(temp_path, "wb") as f:
             f.write(uploaded_vcf.getbuffer())
 
+        detected_type = detect_vcf_type(temp_path)
+        expected_type = "cnv" if analysis_mode == "CNV Deletion" else "snv"
+
+        if detected_type != expected_type:
+            st.warning(
+                f"⚠️ This file looks like it contains **{detected_type.upper()}**-style records, "
+                f"but you selected **{analysis_mode}** mode. Results may be inaccurate - "
+                f"consider switching modes."
+            )
+
         patient_hpo_terms = [s["hpo_id"] for s in st.session_state.selected_symptoms]
 
         ranked = None
+        X = None
+        model = None
         display_columns = []
 
-        if analysis_mode == "SNV / Indel":
-            with st.spinner("Parsing VCF..."):
-                patient_variants = parse_patient_vcf(temp_path)
+        try:
+            if analysis_mode == "SNV / Indel":
+                with st.spinner("Parsing VCF..."):
+                    patient_variants = parse_patient_vcf(temp_path)
 
-            if len(patient_variants) == 0:
-                st.error("No SNV/indel variants could be parsed from this VCF.")
-            else:
-                st.success(f"Parsed {len(patient_variants)} variants.")
+                if len(patient_variants) == 0:
+                    st.error("No SNV/indel variants could be parsed from this VCF.")
+                else:
+                    st.success(f"Parsed {len(patient_variants)} variants.")
 
-                with st.spinner("Annotating variants against reference databases..."):
-                    annotated = annotate_variants(patient_variants, reference_tables)
+                    with st.spinner("Annotating variants against reference databases..."):
+                        annotated = annotate_variants(patient_variants, reference_tables)
 
-                with st.spinner("Scoring phenotype similarity..."):
-                    scored = score_patient_variants(
-                        annotated, patient_hpo_terms, reference_tables["omim"], hpo_annotations_df
-                    )
+                    with st.spinner("Scoring phenotype similarity..."):
+                        scored = score_patient_variants(
+                            annotated, patient_hpo_terms, reference_tables["omim"], hpo_annotations_df
+                        )
 
-                with st.spinner("Running SNV prioritization model..."):
-                    ranked = predict_and_rank(scored)
+                    with st.spinner("Running SNV prioritization model..."):
+                        ranked, X, model = predict_and_rank(scored)
 
-                display_columns = [
-                    "rank", "gene_symbol", "variant_id", "relevance_score",
-                    "phenotype_similarity_score", "best_matching_disease",
-                    "clinvar_significance", "in_clinvar"
-                ]
+                    display_columns = [
+                        "rank", "gene_symbol", "variant_id", "relevance_score",
+                        "phenotype_similarity_score", "best_matching_disease",
+                        "clinvar_significance", "in_clinvar"
+                    ]
 
-        else:  # CNV Deletion
-            with st.spinner("Parsing CNV VCF..."):
-                patient_variants = parse_patient_cnv_vcf(temp_path)
+            else:  # CNV Deletion
+                with st.spinner("Parsing CNV VCF..."):
+                    patient_variants = parse_patient_cnv_vcf(temp_path)
 
-            if len(patient_variants) == 0:
-                st.error("No CNV deletions (SVTYPE=DEL with END field) could be parsed from this VCF.")
-            else:
-                st.success(f"Parsed {len(patient_variants)} deletions.")
+                if len(patient_variants) == 0:
+                    st.error("No CNV deletions (SVTYPE=DEL with END field) could be parsed from this VCF.")
+                else:
+                    st.success(f"Parsed {len(patient_variants)} deletions.")
 
-                with st.spinner("Annotating deletions against gene coordinates..."):
-                    annotated = annotate_cnv_variants(patient_variants, reference_tables)
+                    with st.spinner("Annotating deletions against gene coordinates..."):
+                        annotated = annotate_cnv_variants(patient_variants, reference_tables)
 
-                with st.spinner("Scoring phenotype similarity..."):
-                    scored = score_patient_variants(
-                        annotated, patient_hpo_terms, reference_tables["omim"], hpo_annotations_df
-                    )
+                    with st.spinner("Scoring phenotype similarity..."):
+                        scored = score_patient_variants(
+                            annotated, patient_hpo_terms, reference_tables["omim"], hpo_annotations_df
+                        )
 
-                with st.spinner("Running CNV prioritization model..."):
-                    ranked = predict_and_rank_cnv(scored)
+                    with st.spinner("Running CNV prioritization model..."):
+                        ranked, X, model = predict_and_rank_cnv(scored)
 
-                display_columns = [
-                    "rank", "gene_symbol", "variant_id", "relevance_score",
-                    "phenotype_similarity_score", "best_matching_disease",
-                    "deletion_size", "overlap_fraction_of_gene"
-                ]
+                    display_columns = [
+                        "rank", "gene_symbol", "variant_id", "relevance_score",
+                        "phenotype_similarity_score", "best_matching_disease",
+                        "deletion_size", "overlap_fraction_of_gene"
+                    ]
+
+        except ValueError as e:
+            st.error(f"⚠️ Could not process this file: {e}")
 
         if ranked is not None:
             st.header("Results: Ranked Candidate Variants")
             st.dataframe(ranked[display_columns], use_container_width=True)
+
+            csv_data = ranked[display_columns].to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="📥 Download Results as CSV",
+                data=csv_data,
+                file_name="variantx_results.csv",
+                mime="text/csv"
+            )
 
             st.subheader("Top Candidate Detail")
             top_variant = ranked.iloc[0]
@@ -237,3 +262,25 @@ if st.button("Run Analysis", type="primary"):
                     "This variant was not found in ClinVar. Ranking relies primarily on "
                     "gene-level and phenotype evidence rather than known clinical significance."
                 )
+
+            with st.spinner("Computing explanation for top candidate..."):
+                try:
+                    supporting, opposing = explain_top_candidate(ranked, X, model)
+
+                    st.subheader("Why was this variant ranked #1?")
+                    col_sup, col_opp = st.columns(2)
+
+                    with col_sup:
+                        st.markdown("**✅ Supporting evidence**")
+                        for _, row in supporting.iterrows():
+                            st.write(f"- `{row['feature']}` = {row['value']} (impact: +{row['shap_value']:.3f})")
+
+                    with col_opp:
+                        st.markdown("**⚠️ Opposing evidence**")
+                        if len(opposing) > 0:
+                            for _, row in opposing.iterrows():
+                                st.write(f"- `{row['feature']}` = {row['value']} (impact: {row['shap_value']:.3f})")
+                        else:
+                            st.write("_No significant opposing evidence found._")
+                except Exception as e:
+                    st.info(f"Explanation could not be computed: {e}")
