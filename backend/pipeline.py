@@ -170,16 +170,16 @@ def load_reference_tables():
     """Load all the reference tables needed for live annotation.
     Called once when the app starts, not per-request."""
     clinvar = pd.read_csv(
-        "data/interim/clinvar_tables/clinvar_variants_clean.csv",
+        "../data/interim/clinvar_tables/clinvar_variants_clean.csv",
         dtype={"chromosome": str}
     )
     ensembl = pd.read_csv(
-        "data/interim/ensembl_tables/gene_coordinates_clean.csv",
+        "../data/interim/ensembl_tables/gene_coordinates_clean.csv",
         dtype={"chromosome": str}
     )
-    gnomad = pd.read_csv("data/interim/gnomad_tables/gene_constraint_clean.csv")
-    clingen = pd.read_csv("data/interim/clingen_tables/gene_dosage_clean.csv")
-    omim = pd.read_csv("data/interim/omim_tables/gene_disease_inheritance.csv")
+    gnomad = pd.read_csv("../data/interim/gnomad_tables/gene_constraint_clean.csv")
+    clingen = pd.read_csv("../data/interim/clingen_tables/gene_dosage_clean.csv")
+    omim = pd.read_csv("../data/interim/omim_tables/gene_disease_inheritance.csv")
 
     return {
         "clinvar": clinvar,
@@ -501,7 +501,7 @@ def prepare_for_prediction(scored_df):
     return X, df
 
 
-def predict_and_rank(scored_df, model_path="data/processed/snv/snv_model.txt"):
+def predict_and_rank(scored_df, model_path="../data/processed/snv/snv_model.txt"):
     """Returns (ranked_df, X, model) - X and model are needed later for
     on-demand SHAP explanation of the top candidate."""
     model = lgb.Booster(model_file=model_path)
@@ -554,7 +554,7 @@ def prepare_cnv_for_prediction(scored_df):
     return X, df
 
 
-def predict_and_rank_cnv(scored_df, model_path="data/processed/cnv/cnv_model.txt"):
+def predict_and_rank_cnv(scored_df, model_path="../data/processed/cnv/cnv_model.txt"):
     """Returns (ranked_df, X, model)."""
     model = lgb.Booster(model_file=model_path)
 
@@ -603,9 +603,9 @@ def explain_top_candidate(ranked_df, X, model, top_n_features=5):
 
 
 if __name__ == "__main__":
-    patient_variants = parse_patient_vcf("data/sample_patient/sample_patient.vcf")
+    patient_variants = parse_patient_vcf("../data/sample_patient/sample_patient.vcf")
     reference_tables = load_reference_tables()
-    hpo_annotations = pd.read_csv("data/interim/hpo_tables/disease_hpo_annotations_clean.csv", low_memory=False)
+    hpo_annotations = pd.read_csv("../data/interim/hpo_tables/disease_hpo_annotations_clean.csv", low_memory=False)
 
     annotated = annotate_variants(patient_variants, reference_tables)
 
